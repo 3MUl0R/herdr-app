@@ -219,8 +219,9 @@ export default class Files extends View {
 
   discardAndOpen(cx) {
     const next = this.pendingOpen;
-    this.dirty = false; this.editing = false; this.pendingOpen = undefined;
-    this.show(next === undefined ? this.file : next, cx);
+    this.dirty = false; this.editing = false; this.pendingOpen = undefined; this.notice = null;
+    if (next === this.file || next === undefined) this.makeEditor(this.file, this.original, true);
+    else this.show(next, cx);
     cx.notify();
   }
 
@@ -234,9 +235,12 @@ export default class Files extends View {
       return;
     }
     if (text === original) {
-      this.editing = false;
-      this.makeEditor(file, text, true);
-      this.notice = null; cx.notify();
+      this.editing = false; this.dirty = false; this.notice = null;
+      const next = this.pendingOpen;
+      this.pendingOpen = undefined;
+      if (next !== undefined && next !== file) this.show(next, cx);
+      else this.makeEditor(file, text, true);
+      cx.notify();
       return;
     }
     this.saving = true; this.notice = null; cx.notify();
