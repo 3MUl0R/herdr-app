@@ -93,14 +93,14 @@ pub fn read_with(
     }
 }
 
-pub fn write_text(
-    path: String,
-    text: String,
-    expected: Option<String>,
+/// Runs a guarded file write outside the UI thread. Both local and remote
+/// writes use this adapter so the mod receives the same errors and null result.
+pub fn write_with(
+    write: impl FnOnce() -> Result<(), String> + Send + 'static,
 ) -> impl std::future::Future<Output = Result<HostValue, HostError>> + Send {
     let (tx, rx) = async_channel::bounded(1);
     std::thread::spawn(move || {
-        let _ = tx.send_blocking(write(Path::new(&path), &text, expected.as_deref()));
+        let _ = tx.send_blocking(write());
     });
     async move {
         rx.recv()
@@ -109,6 +109,11 @@ pub fn write_text(
             .map_err(HostError::new)?;
         Ok(HostValue::Null)
     }
+}
+
+/// Apply the same stale-snapshot guard to files on this computer.
+pub fn write_checked_local(path: &str, text: &str, expected: Option<&str>) -> Result<(), String> {
+    write(Path::new(path), text, expected)
 }
 
 #[cfg(test)]

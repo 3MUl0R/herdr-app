@@ -181,7 +181,15 @@ the title bar, panes as cards, a space picker) and `win98`
 writing a new file. The Files panel supports Windows folder paths with spaces,
 parentheses and apostrophes, and preserves Unicode file and folder names
 (including Chinese). Directory links expand as folders; their contents load
-only when expanded.
+only when expanded. In the first-party Files panel, + File and + Folder
+create an entry in the current folder. Use the + on a nested folder to
+create inside it (the inline form switches File/Folder). Selecting a text
+file shows Edit; Save checks whether it still matches the original on its
+own machine, and refuses stale overwrites. Files with truncated previews
+are read-only. Unsaved edits require Save or Discard when leaving a file;
+drafts held while switching spaces are in memory only, not saved to disk.
+Remote editing needs a herdr-core supporting file.write_checked; older
+cores refuse the request rather than silently writing unconditionally.
 
 **Herdr's own layouts and mods are read-only.** They are replaced whole
 on every start. Use settings.json for look (fonts, sizes, theme, colors,
@@ -1000,7 +1008,9 @@ All of it is in `herdr.d.ts`. In short:
   `pickFolder({ prompt })`: the system's folder picker (here only),
   resolves with the folder or null.
 - Files: `readTextFile(path, { on })` (here, or on that machine),
-  `writeTextFile(path, text, expected)` (here only), and
+  `writeTextFile(path, text, expected, { on? })` (here or remotely;
+  `expected: null` creates only if absent, a string requires an exact match;
+  remote writes need the checked-write RPC), and
   `watchFolder(dir)` (here only; poll a remote space's folder): resolves with the changed paths the next time anything
   under `dir` changes. On Linux, Git-ignored directories and Git objects are skipped,
   and trees above 4096 non-ignored directories reject the watch; use a timer fallback.

@@ -765,15 +765,31 @@ fn exec_limit(options: Option<&HostValue>) -> Result<Duration, HostError> {
 }
 
 fn run_blocking(command: &str, args: &[String], cwd: Option<String>, limit: Duration) -> Result<(i32, String, String), String> {
+    run_blocking_with_input(command, args, cwd, limit, None)
+}
+
+fn run_blocking_with_input(
+    command: &str,
+    args: &[String],
+    cwd: Option<String>,
+    limit: Duration,
+    input: Option<Vec<u8>>,
+) -> Result<(i32, String, String), String> {
     use std::io::Read;
     let mut child = crate::spawn::command(command)
         .args(args)
         .current_dir(cwd.map(PathBuf::from).unwrap_or_else(home))
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("cannot run {command}: {e}"))?;
+    // Stream RPC data through stdin rather than revealing file contents in argv,
+    // command logs, or a temporary disk file.
+    let writer = input.map(|bytes| {
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        std::thread::spawn(move || std::io::Write::write_all(&mut stdin, &bytes))
+    });
     // Bounded: a chatty command can't fill memory; the rest is drained and dropped.
     let drain = |r: Box<dyn Read + Send>| {
         std::thread::spawn(move || {
@@ -799,6 +815,9 @@ fn run_blocking(command: &str, args: &[String], cwd: Option<String>, limit: Dura
             Err(e) => return Err(e.to_string()),
         }
     };
+    if let Some(writer) = writer {
+        writer.join().map_err(|_| "stdin writer panicked".to_string())?.map_err(|e| e.to_string())?;
+    }
     Ok((status.code().unwrap_or(-1), out.join().unwrap_or_default(), err.join().unwrap_or_default()))
 }
 
@@ -857,6 +876,44 @@ fn known_agents(on: Option<String>, list: Vec<Value>) -> Value {
             })
             .collect(),
     )
+}
+
+/// Use core's dedicated checked-write method. An older core will refuse this
+/// method instead of silently ignoring its safety preconditions.
+fn write_remote(machine: &str, path: &str, text: &str, expected: Option<&str>) -> Result<(), String> {
+    use base64::Engine;
+    if text.len() as u64 > crate::mod_files::LIMIT || expected.is_some_and(|s| s.len() as u64 > crate::mod_files::LIMIT) {
+        return Err("Text file exceeds 1 MiB".into());
+    }
+    let encode = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "file.write_checked",
+        "params": {
+            "on": machine,
+            "path": path,
+            "data": encode(text.as_bytes()),
+            "expected_data": expected.map(|s| encode(s.as_bytes())),
+            "only_if_missing": expected.is_none(),
+            "private": expected.is_none()
+        }
+    });
+    let mut input = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
+    input.push(b'\n');
+    let (code, out, err) = run_blocking_with_input("hc", &["connect".into()], None, EXEC_LIMIT, Some(input))?;
+    let response: Value = out.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|v| v["id"] == 1).ok_or_else(|| format!("herdr-core did not answer file.write_checked (exit {code}): {}", err.trim()))?;
+    if let Some(error) = response.get("error") {
+        let message = error["message"].as_str().unwrap_or("remote file write failed");
+        let kind = error["data"]["kind"].as_str().unwrap_or("");
+        return Err(if kind == "conflict" { format!("Remote file changed since you opened it: {message}") }
+            else { format!("{kind}: {message}") });
+    }
+    if response.get("result").is_none() {
+        return Err("herdr-core returned no file write result".into());
+    }
+    Ok(())
 }
 
 /// A text file on another machine: `cat`, or `type` where there is none (Windows).
@@ -925,8 +982,14 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             }))
         })
         .async_function("writeTextFile", |a| {
+            let path = a.string(0)?.to_owned();
+            let text = a.string(1)?.to_owned();
             let expected = a.get(2).and_then(|v| match v { HostValue::Str(s) => Some(s.clone()), _ => None });
-            Ok(crate::mod_files::write_text(a.string(0)?.to_owned(), a.string(1)?.to_owned(), expected))
+            let on = opt_str(a.get(3), "on");
+            Ok(match on {
+                Some(machine) => crate::mod_files::write_with(move || write_remote(&machine, &path, &text, expected.as_deref())),
+                None => crate::mod_files::write_with(move || crate::mod_files::write_checked_local(&path, &text, expected.as_deref())),
+            })
         })
         .async_function("hc", |a| Ok(exec_future("hc".into(), strings(a.get(0)), None, None, EXEC_LIMIT)))
         .function("home", |_| Ok(home().to_string_lossy().into_owned().into()))
