@@ -111,6 +111,11 @@ pub fn write_with(
     }
 }
 
+/// Apply the same stale-snapshot guard to files on this computer.
+pub fn write_checked_local(path: &str, text: &str, expected: Option<&str>) -> Result<(), String> {
+    write(Path::new(path), text, expected)
+}
+
 pub fn write_text(
     path: String,
     text: String,
