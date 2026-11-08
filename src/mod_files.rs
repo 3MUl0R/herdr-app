@@ -116,14 +116,6 @@ pub fn write_checked_local(path: &str, text: &str, expected: Option<&str>) -> Re
     write(Path::new(path), text, expected)
 }
 
-pub fn write_text(
-    path: String,
-    text: String,
-    expected: Option<String>,
-) -> impl std::future::Future<Output = Result<HostValue, HostError>> + Send {
-    write_with(move || write(Path::new(&path), &text, expected.as_deref()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
