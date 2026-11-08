@@ -3,7 +3,8 @@
 ## Mods have your access
 
 A mod is trusted JavaScript running inside Herdr. It can run programs with your environment, fetch URLs and read files.
-The built-in file API limits writes to the app home, but a mod can run a program to write elsewhere. That is not a security boundary.
+The mod-facing fs/promises API limits writes to the app home, but writeTextFile and exec can write in the user's accessible files, including on connected machines. This is not a sandbox or a security boundary.
+Remote text saves use a guarded core operation; requests from older cores fail closed instead of falling back to unconditional writes. The Files panel keeps unsaved drafts in memory, never as plaintext recovery copies on disk.
 Mods can also run programs on connected machines.
 
 There is no permission prompt for each program or network request. Read a mod before installing it, and treat it like a shell script you would run yourself.
