@@ -25,8 +25,10 @@ export function appHome(): string;
  *  `on`: from that machine (a space's `machine`). */
 export function readTextFile(path: string, options?: { on?: string | null }): Promise<string | null>;
 /** Writes UTF-8 text only if it still matches expected (null creates a new file).
- * Rejects on a stale snapshot; existing files are replaced atomically. */
-export function writeTextFile(path: string, text: string, expected: string | null): Promise<null>;
+ * Rejects stale snapshots; existing files are replaced atomically.
+ * On a remote machine requires herdr-core with file.write_checked support;
+ * it never falls back to unconditional writes. */
+export function writeTextFile(path: string, text: string, expected: string | null, options?: { on?: string | null }): Promise<null>;
 
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
