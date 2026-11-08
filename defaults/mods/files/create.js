@@ -1,11 +1,11 @@
 // First-party Files-panel creation operations. Names are validated before use.
 // File contents never travel through shell arguments.
-const INVALID = /[\\x00-\\x1f\\x7f/\\\\]/;
+const INVALID = /[\x00-\x1f\x7f/\\]/;
 const WIN_INVALID = /[<>:"|?*]/;
-const WIN_DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)/i;
+const WIN_DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 
 export function windowsPath(path) {
-  return /^[a-z]:[\\\\/]/i.test(path) || path.startsWith("\\\\");
+  return /^[a-z]:[\\/]/i.test(path) || path.startsWith("\\");
 }
 
 export function validateNewName(name, windows = false) {
@@ -21,7 +21,7 @@ export function validateNewName(name, windows = false) {
 export function childPath(folder, name) {
   if (typeof folder !== "string" || !folder.trim()) throw new Error("No folder selected");
   if (validateNewName(name)) throw new Error("Invalid name");
-  return `${folder.replace(/[\\\\/]$/, "")}/${name}`;
+  return `${folder.replace(/[/\\]$/, "")}/${name}`;
 }
 
 const FILE_SH = 'umask 077; (set -C; : > "$1")';
