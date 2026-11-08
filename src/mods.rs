@@ -900,7 +900,7 @@ fn write_remote(machine: &str, path: &str, text: &str, expected: Option<&str>) -
         }
     });
     let mut input = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
-    input.push(b'\\n');
+    input.push(b'\n');
     let (code, out, err) = run_blocking_with_input("hc", &["connect".into()], None, EXEC_LIMIT, Some(input))?;
     let response: Value = out.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .find(|v| v["id"] == 1).ok_or_else(|| format!("herdr-core did not answer file.write_checked (exit {code}): {}", err.trim()))?;
